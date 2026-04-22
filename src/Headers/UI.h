@@ -8,12 +8,12 @@
 
 class Board;
 
-// Which screen we are currently on
 enum class GameState {
     Menu,
+    ChoosingSide,       // new: pick White or Black before PvAI starts
     PlayingPvP,
     PlayingPvAI,
-    AwaitingPromotion,  // waiting for player to pick a promotion piece
+    AwaitingPromotion,
     GameOver
 };
 
@@ -25,36 +25,36 @@ public:
 
     // --- Menu ---
     void drawMenu() const;
-
-    // Returns GameState::PlayingPvP, PlayingPvAI, or Menu (nothing clicked)
+    // Returns PlayingPvP, PlayingPvAI, or Menu (nothing clicked)
     GameState handleMenuClick(sf::Vector2i mousePos) const;
 
-    // --- In-game panels ---
-    // Draw the sidebar: move history, captured pieces, timer
+    // --- Side selection (PvAI only) ---
+    void drawSideSelection() const;
+    // Returns White, Black, or nullopt (nothing clicked)
+    std::optional<PieceColor> handleSideSelectionClick(sf::Vector2i mousePos) const;
+
+    // --- In-game sidebar ---
     void drawSidebar(const Board& board,
         float whiteTimeSeconds,
         float blackTimeSeconds,
         PieceColor currentTurn) const;
 
-    // --- Game Over screen ---
+    // --- Game Over ---
     void drawGameOver(const std::string& resultMessage) const;
 
     // --- Pawn promotion dialog ---
-    // Draws a box asking the player to pick a piece
     void drawPromotionDialog(PieceColor color) const;
-
-    // Returns PieceType if a promotion option was clicked, or nullopt if not
     std::optional<PieceType> handlePromotionClick(sf::Vector2i mousePos, PieceColor color) const;
 
 private:
     sf::RenderWindow& window;
     sf::Font font;
 
-    // Menu button rects — stored so handleMenuClick can hit-test them
     sf::FloatRect pvpButtonRect;
     sf::FloatRect pvaiButtonRect;
+    sf::FloatRect whiteButtonRect;
+    sf::FloatRect blackButtonRect;
 
-    // Helpers
     void drawButton(const std::string& label, sf::FloatRect rect, sf::Color color) const;
     void drawMoveHistory(const std::vector<std::string>& history, sf::Vector2f origin) const;
     void drawCapturedPieces(const std::vector<class Piece*>& pieces,

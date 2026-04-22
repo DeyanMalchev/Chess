@@ -3,7 +3,6 @@
 #include "Headers/Pieces.h"
 #include "Headers/UI.h"
 #include <iostream>
-#include <mutex>
 
 Game::Game()
     : window(sf::VideoMode({ 1100u, 700u }), "Chess"),
@@ -17,8 +16,6 @@ void Game::run() {
         std::cerr << "Some textures failed to load.\n";
 
     ui.loadFont("assets/font.ttf");
-
-    // Start at menu
     gameState = GameState::Menu;
 
     while (window.isOpen()) {
@@ -29,7 +26,7 @@ void Game::run() {
     }
 }
 
-void Game::startGame(GameState mode) {
+void Game::startGame(GameState mode, PieceColor humanColor) {
     gameState = mode;
     stateBeforePromotion = mode;
     currentTurn = PieceColor::White;
@@ -40,12 +37,20 @@ void Game::startGame(GameState mode) {
     blackTime = 600.f;
 
     board.init(textures);
+    board.clearMoveHistory();
 
-    // Create AI if PvAI mode
     delete ai;
     ai = nullptr;
+
     if (mode == GameState::PlayingPvAI) {
-        ai = new AI(aiColor, 4);  // depth 4
+        playerColor = humanColor;
+        aiColor = (humanColor == PieceColor::White) ? PieceColor::Black : PieceColor::White;
+        boardFlipped = (humanColor == PieceColor::Black);
+        ai = new AI(aiColor, 4);
+    }
+    else {
+        // PvP — always White perspective
+        boardFlipped = false;
     }
 }
 
@@ -61,17 +66,23 @@ void Game::processEvents() {
             if (mp->button == sf::Mouse::Button::Left) {
                 sf::Vector2i mousePos = { mp->position.x, mp->position.y };
 
-                if (gameState == GameState::Menu) {
+                switch (gameState) {
+                case GameState::Menu:
                     handleMenuClick(mousePos);
-                }
-                else if (gameState == GameState::PlayingPvP || gameState == GameState::PlayingPvAI) {
+                    break;
+                case GameState::ChoosingSide:
+                    handleSideSelectionClick(mousePos);
+                    break;
+                case GameState::PlayingPvP:
+                case GameState::PlayingPvAI:
                     handleBoardClick(mousePos);
-                }
-                else if (gameState == GameState::AwaitingPromotion) {
+                    break;
+                case GameState::AwaitingPromotion:
                     handlePromotionClick(mousePos);
-                }
-                else if (gameState == GameState::GameOver) {
+                    break;
+                case GameState::GameOver:
                     gameState = GameState::Menu;
+                    break;
                 }
             }
         }
@@ -79,23 +90,15 @@ void Game::processEvents() {
 }
 
 // -------------------------------------------------------
-// Update — timers + AI turn trigger
+// Update — timers + AI turn
 // -------------------------------------------------------
 void Game::update(float deltaTime) {
     if (gameState == GameState::PlayingPvP || gameState == GameState::PlayingPvAI) {
-        bool isAIThinking = ai && ai->isThinking();
+        if (currentTurn == PieceColor::White)
+            whiteTime = std::max(0.f, whiteTime - deltaTime);
+        else
+            blackTime = std::max(0.f, blackTime - deltaTime);
 
-        // Only tick the timer when it's the human's turn
-        // or when the AI has already returned its move.
-        // This prevents the player losing time while AI thinks.
-        if (!isAIThinking) {
-            if (currentTurn == PieceColor::White)
-                whiteTime = std::max(0.f, whiteTime - deltaTime);
-            else
-                blackTime = std::max(0.f, blackTime - deltaTime);
-        }
-
-        // Poll the AI for its move every frame
         if (gameState == GameState::PlayingPvAI && ai && currentTurn == aiColor)
             triggerAIMove();
     }
@@ -107,21 +110,28 @@ void Game::update(float deltaTime) {
 void Game::render() {
     window.clear(sf::Color(30, 30, 30));
 
-    if (gameState == GameState::Menu) {
+    switch (gameState) {
+    case GameState::Menu:
         ui.drawMenu();
-    }
-    else if (gameState == GameState::PlayingPvP
-        || gameState == GameState::PlayingPvAI
-        || gameState == GameState::AwaitingPromotion) {
-        board.draw(window);
+        break;
+    case GameState::ChoosingSide:
+        ui.drawSideSelection();
+        break;
+    case GameState::PlayingPvP:
+    case GameState::PlayingPvAI:
+        board.draw(window, boardFlipped);
         ui.drawSidebar(board, whiteTime, blackTime, currentTurn);
-        if (gameState == GameState::AwaitingPromotion)
-            ui.drawPromotionDialog(currentTurn);
-    }
-    else if (gameState == GameState::GameOver) {
-        board.draw(window);
+        break;
+    case GameState::AwaitingPromotion:
+        board.draw(window, boardFlipped);
+        ui.drawSidebar(board, whiteTime, blackTime, currentTurn);
+        ui.drawPromotionDialog(currentTurn);
+        break;
+    case GameState::GameOver:
+        board.draw(window, boardFlipped);
         ui.drawSidebar(board, whiteTime, blackTime, currentTurn);
         ui.drawGameOver(gameOverMessage);
+        break;
     }
 
     window.display();
@@ -132,19 +142,29 @@ void Game::render() {
 // -------------------------------------------------------
 void Game::handleMenuClick(sf::Vector2i& mousePos) {
     GameState chosen = ui.handleMenuClick(mousePos);
-    if (chosen == GameState::PlayingPvP || chosen == GameState::PlayingPvAI)
-        startGame(chosen);
+    if (chosen == GameState::PlayingPvP)
+        startGame(GameState::PlayingPvP);
+    else if (chosen == GameState::ChoosingSide)
+        gameState = GameState::ChoosingSide;  // show side picker before starting
 }
 
 // -------------------------------------------------------
-// Board click — only called when it's the human's turn
+// Side selection click (PvAI only)
+// -------------------------------------------------------
+void Game::handleSideSelectionClick(sf::Vector2i& mousePos) {
+    auto chosen = ui.handleSideSelectionClick(mousePos);
+    if (chosen.has_value())
+        startGame(GameState::PlayingPvAI, *chosen);
+}
+
+// -------------------------------------------------------
+// Board click — only when it's the human's turn
 // -------------------------------------------------------
 void Game::handleBoardClick(sf::Vector2i& mousePos) {
-    // In PvAI, block clicks when it's the AI's turn
     if (gameState == GameState::PlayingPvAI && currentTurn == aiColor)
         return;
 
-    sf::Vector2i boardPos = board.pixelToBoard(mousePos);
+    sf::Vector2i boardPos = board.pixelToBoard(mousePos, boardFlipped);
     if (boardPos.x < 0 || boardPos.x >= 8 || boardPos.y < 0 || boardPos.y >= 8)
         return;
 
@@ -174,13 +194,12 @@ void Game::handleBoardClick(sf::Vector2i& mousePos) {
 }
 
 // -------------------------------------------------------
-// Promotion click — player picks which piece to promote to
+// Promotion click
 // -------------------------------------------------------
 void Game::handlePromotionClick(sf::Vector2i& mousePos) {
     auto chosen = ui.handlePromotionClick(mousePos, currentTurn);
-    if (!chosen) return;  // clicked outside the dialog
+    if (!chosen) return;
 
-    // Replace the pawn with the chosen piece
     sf::Texture* tex = textures.getTexture(*chosen, currentTurn);
     board.promotePawn(*pendingPromotionSquare, *chosen, tex);
 
@@ -192,7 +211,7 @@ void Game::handlePromotionClick(sf::Vector2i& mousePos) {
 }
 
 // -------------------------------------------------------
-// Select a piece and compute its legal moves
+// Select piece and cache legal moves
 // -------------------------------------------------------
 void Game::selectPiece(Piece* piece) {
     selectedPiece = piece;
@@ -209,23 +228,20 @@ void Game::selectPiece(Piece* piece) {
 }
 
 // -------------------------------------------------------
-// makeMove — applies a move, checks for promotion
+// makeMove
 // -------------------------------------------------------
 void Game::makeMove(sf::Vector2i from, sf::Vector2i to) {
     Piece* movingPiece = board.getPieceAt(from);
 
-    // Castling — move the rook when king moves 2 squares
     if (movingPiece && movingPiece->getType() == PieceType::King) {
         int dx = to.x - from.x;
         if (dx == 2)  board.movePiece({ 7, from.y }, { 5, from.y });
         if (dx == -2) board.movePiece({ 0, from.y }, { 3, from.y });
     }
 
-    // Capture
     if (board.getPieceAt(to)) board.removePiece(to);
     board.movePiece(from, to);
 
-    // Move history notation
     auto toFile = [](int col) { return std::string(1, 'a' + col); };
     auto toRank = [](int row) { return std::to_string(8 - row); };
     board.addMoveToHistory(toFile(from.x) + toRank(from.y) + "-" + toFile(to.x) + toRank(to.y));
@@ -234,15 +250,13 @@ void Game::makeMove(sf::Vector2i from, sf::Vector2i to) {
     legalMovesCache.clear();
     board.clearHighlights();
 
-    // Check for pawn promotion
     Piece* moved = board.getPieceAt(to);
-    int backRank = (currentTurn == PieceColor::White) ? 0 : 7;
+    int    backRank = (currentTurn == PieceColor::White) ? 0 : 7;
 
     if (moved && moved->getType() == PieceType::Pawn && to.y == backRank) {
         pendingPromotionSquare = to;
         stateBeforePromotion = gameState;
         gameState = GameState::AwaitingPromotion;
-        // Don't switch turns yet — happens after promotion choice
         return;
     }
 
@@ -251,21 +265,16 @@ void Game::makeMove(sf::Vector2i from, sf::Vector2i to) {
 }
 
 // -------------------------------------------------------
-// triggerAIMove — called every frame during AI's turn.
-// ai->update() starts the background search on the first
-// call and returns nullopt while thinking. Once the search
-// finishes it returns the best move and we apply it.
-// The timer only switches AFTER the move is applied.
+// triggerAIMove — synchronous; runs and applies move in one frame.
 // -------------------------------------------------------
 void Game::triggerAIMove() {
     if (!ai) return;
 
     auto maybeMove = ai->update(board, validator);
-    if (!maybeMove) return;  // still thinking — come back next frame
+    if (!maybeMove) return;
 
     Move best = *maybeMove;
 
-    // Apply castling rook
     Piece* movingPiece = board.getPieceAt(best.from);
     if (movingPiece && movingPiece->getType() == PieceType::King) {
         int dx = best.to.x - best.from.x;
@@ -276,9 +285,8 @@ void Game::triggerAIMove() {
     if (board.getPieceAt(best.to)) board.removePiece(best.to);
     board.movePiece(best.from, best.to);
 
-    // AI always promotes to queen
     Piece* moved = board.getPieceAt(best.to);
-    int backRank = (aiColor == PieceColor::White) ? 0 : 7;
+    int    backRank = (aiColor == PieceColor::White) ? 0 : 7;
     if (moved && moved->getType() == PieceType::Pawn && best.to.y == backRank) {
         sf::Texture* tex = textures.getTexture(PieceType::Queen, aiColor);
         board.promotePawn(best.to, PieceType::Queen, tex);

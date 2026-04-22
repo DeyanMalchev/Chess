@@ -7,15 +7,9 @@
 // Board offset in pixels — leave room on the left/top for labels
 static const int LABEL_OFFSET = 30;
 
-Board::Board() {
-    // Font is loaded separately so we can report errors
-}
+Board::Board() {}
 
-
-// Replace the pawn at pos with a new piece of newType (same color).
-// Called after a pawn reaches the back rank.
 Board::Board(const Board& other) {
-    // Clone every piece — the AI's search board is fully independent
     for (auto& p : other.pieces)
         pieces.push_back(p->clone());
     // Font, highlights, and move history are not copied —
@@ -45,22 +39,14 @@ void Board::promotePawn(sf::Vector2i pos, PieceType newType, sf::Texture* textur
 void Board::init(TextureManager& textures) {
     pieces.clear();
 
-    // Load font for rank/file labels
-    if (!font.openFromFile("assets/font.ttf")) {
+    if (!font.openFromFile("assets/font.ttf"))
         std::cerr << "Failed to load font: assets/font.ttf\n";
-    }
 
-    // Helper lambda to add a piece cleanly
     auto add = [&](auto piece) {
         pieces.push_back(std::make_unique<decltype(piece)>(std::move(piece)));
         };
 
-    // -------------------------------------------------------
-    // Place pieces in standard chess starting positions
-    // Board coords: col 0-7 = a-h, row 0 = top (black side), row 7 = bottom (white side)
-    // -------------------------------------------------------
-
-    // --- Black pieces (row 0 = back rank, row 1 = pawns) ---
+    // Black pieces
     pieces.push_back(std::make_unique<Rook>(PieceColor::Black, sf::Vector2i{ 0,0 }, textures.getTexture(PieceType::Rook, PieceColor::Black)));
     pieces.push_back(std::make_unique<Knight>(PieceColor::Black, sf::Vector2i{ 1,0 }, textures.getTexture(PieceType::Knight, PieceColor::Black)));
     pieces.push_back(std::make_unique<Bishop>(PieceColor::Black, sf::Vector2i{ 2,0 }, textures.getTexture(PieceType::Bishop, PieceColor::Black)));
@@ -69,11 +55,10 @@ void Board::init(TextureManager& textures) {
     pieces.push_back(std::make_unique<Bishop>(PieceColor::Black, sf::Vector2i{ 5,0 }, textures.getTexture(PieceType::Bishop, PieceColor::Black)));
     pieces.push_back(std::make_unique<Knight>(PieceColor::Black, sf::Vector2i{ 6,0 }, textures.getTexture(PieceType::Knight, PieceColor::Black)));
     pieces.push_back(std::make_unique<Rook>(PieceColor::Black, sf::Vector2i{ 7,0 }, textures.getTexture(PieceType::Rook, PieceColor::Black)));
-
     for (int col = 0; col < 8; col++)
         pieces.push_back(std::make_unique<Pawn>(PieceColor::Black, sf::Vector2i{ col,1 }, textures.getTexture(PieceType::Pawn, PieceColor::Black)));
 
-    // --- White pieces (row 7 = back rank, row 6 = pawns) ---
+    // White pieces
     pieces.push_back(std::make_unique<Rook>(PieceColor::White, sf::Vector2i{ 0,7 }, textures.getTexture(PieceType::Rook, PieceColor::White)));
     pieces.push_back(std::make_unique<Knight>(PieceColor::White, sf::Vector2i{ 1,7 }, textures.getTexture(PieceType::Knight, PieceColor::White)));
     pieces.push_back(std::make_unique<Bishop>(PieceColor::White, sf::Vector2i{ 2,7 }, textures.getTexture(PieceType::Bishop, PieceColor::White)));
@@ -82,32 +67,43 @@ void Board::init(TextureManager& textures) {
     pieces.push_back(std::make_unique<Bishop>(PieceColor::White, sf::Vector2i{ 5,7 }, textures.getTexture(PieceType::Bishop, PieceColor::White)));
     pieces.push_back(std::make_unique<Knight>(PieceColor::White, sf::Vector2i{ 6,7 }, textures.getTexture(PieceType::Knight, PieceColor::White)));
     pieces.push_back(std::make_unique<Rook>(PieceColor::White, sf::Vector2i{ 7,7 }, textures.getTexture(PieceType::Rook, PieceColor::White)));
-
     for (int col = 0; col < 8; col++)
         pieces.push_back(std::make_unique<Pawn>(PieceColor::White, sf::Vector2i{ col,6 }, textures.getTexture(PieceType::Pawn, PieceColor::White)));
+}
+
+// -------------------------------------------------------
+// Helper: convert a logical board coordinate to a screen
+// column/row, flipping the board when playing as Black.
+// -------------------------------------------------------
+sf::Vector2i Board::toScreen(sf::Vector2i boardPos, bool flipped) const {
+    if (flipped)
+        return { BOARD_SIZE - 1 - boardPos.x, BOARD_SIZE - 1 - boardPos.y };
+    return boardPos;
 }
 
 // -------------------------------------------------------
 // Drawing
 // -------------------------------------------------------
 
-void Board::draw(sf::RenderWindow& window) const {
-    drawSquares(window);
-    drawHighlights(window);
-    drawLabels(window);
-    drawPieces(window);
+void Board::draw(sf::RenderWindow& window, bool flipped) const {
+    drawSquares(window, flipped);
+    drawHighlights(window, flipped);
+    drawLabels(window, flipped);
+    drawPieces(window, flipped);
 }
 
-void Board::drawSquares(sf::RenderWindow& window) const {
+void Board::drawSquares(sf::RenderWindow& window, bool flipped) const {
     sf::RectangleShape square({ static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE) });
 
-    // Classic chess board colors
-    sf::Color lightColor(240, 217, 181);  // cream
-    sf::Color darkColor(181, 136, 99);  // brown
+    sf::Color lightColor(240, 217, 181);
+    sf::Color darkColor(181, 136, 99);
 
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int col = 0; col < BOARD_SIZE; col++) {
-            bool isLight = (row + col) % 2 == 0;
+            // Logical square colour never changes with flip
+            int logicalCol = flipped ? (BOARD_SIZE - 1 - col) : col;
+            int logicalRow = flipped ? (BOARD_SIZE - 1 - row) : row;
+            bool isLight = (logicalRow + logicalCol) % 2 == 0;
             square.setFillColor(isLight ? lightColor : darkColor);
             square.setPosition({
                 static_cast<float>(LABEL_OFFSET + col * TILE_SIZE),
@@ -118,11 +114,12 @@ void Board::drawSquares(sf::RenderWindow& window) const {
     }
 }
 
-void Board::drawLabels(sf::RenderWindow& window) const {
-    // Files: a-h along the bottom
+void Board::drawLabels(sf::RenderWindow& window, bool flipped) const {
+    // Files: a-h (or h-a when flipped)
     const std::string files = "abcdefgh";
     for (int col = 0; col < BOARD_SIZE; col++) {
-        sf::Text label(font, std::string(1, files[col]), 14);
+        int fileIdx = flipped ? (BOARD_SIZE - 1 - col) : col;
+        sf::Text label(font, std::string(1, files[fileIdx]), 14);
         label.setFillColor(sf::Color(100, 100, 100));
         label.setPosition({
             static_cast<float>(LABEL_OFFSET + col * TILE_SIZE + TILE_SIZE / 2 - 5),
@@ -131,9 +128,10 @@ void Board::drawLabels(sf::RenderWindow& window) const {
         window.draw(label);
     }
 
-    // Ranks: 8-1 along the left side (row 0 = rank 8, row 7 = rank 1)
+    // Ranks: 8-1 or 1-8 when flipped
     for (int row = 0; row < BOARD_SIZE; row++) {
-        sf::Text label(font, std::to_string(8 - row), 14);
+        int rank = flipped ? (row + 1) : (8 - row);
+        sf::Text label(font, std::to_string(rank), 14);
         label.setFillColor(sf::Color(100, 100, 100));
         label.setPosition({
             4.f,
@@ -143,45 +141,38 @@ void Board::drawLabels(sf::RenderWindow& window) const {
     }
 }
 
-void Board::drawHighlights(sf::RenderWindow& window) const {
+void Board::drawHighlights(sf::RenderWindow& window, bool flipped) const {
     sf::RectangleShape highlight({ static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE) });
 
-    // Selected square — yellow tint
+    // Selected square
     if (selectedSquare.x >= 0) {
+        auto sc = toScreen(selectedSquare, flipped);
         highlight.setFillColor(sf::Color(255, 255, 0, 120));
         highlight.setPosition({
-            static_cast<float>(LABEL_OFFSET + selectedSquare.x * TILE_SIZE),
-            static_cast<float>(LABEL_OFFSET + selectedSquare.y * TILE_SIZE)
+            static_cast<float>(LABEL_OFFSET + sc.x * TILE_SIZE),
+            static_cast<float>(LABEL_OFFSET + sc.y * TILE_SIZE)
             });
         window.draw(highlight);
     }
 
-    // Legal move squares — green dots
+    // Legal move dots
     sf::CircleShape dot(12.f);
     dot.setFillColor(sf::Color(0, 200, 0, 140));
 
     for (auto& sq : highlightedSquares) {
+        auto sc = toScreen(sq, flipped);
         dot.setPosition({
-            static_cast<float>(LABEL_OFFSET + sq.x * TILE_SIZE + TILE_SIZE / 2 - 12),
-            static_cast<float>(LABEL_OFFSET + sq.y * TILE_SIZE + TILE_SIZE / 2 - 12)
+            static_cast<float>(LABEL_OFFSET + sc.x * TILE_SIZE + TILE_SIZE / 2 - 12),
+            static_cast<float>(LABEL_OFFSET + sc.y * TILE_SIZE + TILE_SIZE / 2 - 12)
             });
         window.draw(dot);
     }
 }
 
-void Board::drawPieces(sf::RenderWindow& window) const {
+void Board::drawPieces(sf::RenderWindow& window, bool flipped) const {
     for (auto& piece : pieces) {
-        // Offset piece drawing by the label margin
-        // We do this by temporarily adjusting the draw call
-        sf::Vector2i boardPos = piece->getPosition();
-
-        // Create a temporary sprite positioned with the label offset
-        // Piece::draw handles the board-to-pixel conversion,
-        // so we pass adjusted pixel coords via a helper offset
-        // The simplest approach: just offset the piece's draw position here
-
-        // We draw manually here to apply the LABEL_OFFSET
-        piece->drawWithOffset(window, TILE_SIZE, LABEL_OFFSET);
+        auto sc = toScreen(piece->getPosition(), flipped);
+        piece->drawAtScreen(window, TILE_SIZE, LABEL_OFFSET, sc);
     }
 }
 
@@ -190,10 +181,8 @@ void Board::drawPieces(sf::RenderWindow& window) const {
 // -------------------------------------------------------
 
 Piece* Board::getPieceAt(sf::Vector2i pos) const {
-    for (auto& p : pieces) {
-        if (p->getPosition() == pos)
-            return p.get();
-    }
+    for (auto& p : pieces)
+        if (p->getPosition() == pos) return p.get();
     return nullptr;
 }
 
@@ -216,15 +205,6 @@ void Board::removePiece(sf::Vector2i pos) {
     }
 }
 
-
-// -------------------------------------------------------
-// makeSimMove
-//
-// Applies a move directly on this board and returns an
-// UndoInfo with everything needed to reverse it.
-// Handles captures, castling, and pawn promotion to Queen.
-// Does NOT touch move history or highlights.
-// -------------------------------------------------------
 UndoInfo Board::makeSimMove(sf::Vector2i from, sf::Vector2i to) {
     UndoInfo undo;
     undo.movedFrom = from;
@@ -233,7 +213,6 @@ UndoInfo Board::makeSimMove(sf::Vector2i from, sf::Vector2i to) {
     Piece* moving = getPieceAt(from);
     undo.movedHadMoved = moving->getHasMoved();
 
-    // Save and remove any captured piece
     Piece* target = getPieceAt(to);
     if (target) {
         for (auto it = pieces.begin(); it != pieces.end(); ++it) {
@@ -245,7 +224,6 @@ UndoInfo Board::makeSimMove(sf::Vector2i from, sf::Vector2i to) {
         }
     }
 
-    // Castling: move the rook too
     if (moving->getType() == PieceType::King) {
         int dx = to.x - from.x;
         if (dx == 2 || dx == -2) {
@@ -261,25 +239,18 @@ UndoInfo Board::makeSimMove(sf::Vector2i from, sf::Vector2i to) {
         }
     }
 
-    // Move the piece
     moving->setPosition(to);
     moving->setHasMoved(true);
 
-    // Pawn promotion: replace with Queen for simulation purposes
     if (moving->getType() == PieceType::Pawn) {
         int backRank = (moving->getColor() == PieceColor::White) ? 0 : 7;
         if (to.y == backRank) {
             undo.wasPromotion = true;
+            undo.promotionColor = moving->getColor();
             PieceColor col = moving->getColor();
-            undo.promotionColor = col;
-            // Remove the pawn
             for (auto it = pieces.begin(); it != pieces.end(); ++it) {
-                if (it->get() == moving) {
-                    pieces.erase(it);
-                    break;
-                }
+                if (it->get() == moving) { pieces.erase(it); break; }
             }
-            // Insert a Queen (texture nullptr is fine for AI — it never draws)
             pieces.push_back(std::make_unique<Queen>(col, to, nullptr));
         }
     }
@@ -287,15 +258,8 @@ UndoInfo Board::makeSimMove(sf::Vector2i from, sf::Vector2i to) {
     return undo;
 }
 
-// -------------------------------------------------------
-// undoSimMove
-//
-// Reverses exactly what makeSimMove did, restoring the
-// board to its prior state.
-// -------------------------------------------------------
 void Board::undoSimMove(UndoInfo& undo) {
     if (undo.wasPromotion) {
-        // Remove the Queen we inserted
         for (auto it = pieces.begin(); it != pieces.end(); ++it) {
             if ((*it)->getPosition() == undo.movedTo
                 && (*it)->getType() == PieceType::Queen
@@ -304,14 +268,11 @@ void Board::undoSimMove(UndoInfo& undo) {
                 break;
             }
         }
-        // Restore the original pawn at its pre-move square
-        pieces.push_back(std::make_unique<Pawn>(
-            undo.promotionColor, undo.movedFrom, nullptr));
+        pieces.push_back(std::make_unique<Pawn>(undo.promotionColor, undo.movedFrom, nullptr));
         Piece* pawn = getPieceAt(undo.movedFrom);
         if (pawn) pawn->setHasMoved(undo.movedHadMoved);
     }
     else {
-        // Find the moved piece at movedTo and move it back
         Piece* moving = getPieceAt(undo.movedTo);
         if (moving) {
             moving->setPosition(undo.movedFrom);
@@ -319,11 +280,9 @@ void Board::undoSimMove(UndoInfo& undo) {
         }
     }
 
-    // Restore captured piece
     if (undo.capturedPiece)
         pieces.push_back(std::move(undo.capturedPiece));
 
-    // Undo castling rook
     if (undo.wasCastle) {
         Piece* rook = getPieceAt(undo.rookTo);
         if (rook) {
@@ -333,38 +292,24 @@ void Board::undoSimMove(UndoInfo& undo) {
     }
 }
 
-
-sf::Vector2i Board::pixelToBoard(sf::Vector2i pixel) const {
-    return {
-        (pixel.x - LABEL_OFFSET) / TILE_SIZE,
-        (pixel.y - LABEL_OFFSET) / TILE_SIZE
-    };
+sf::Vector2i Board::pixelToBoard(sf::Vector2i pixel, bool flipped) const {
+    int col = (pixel.x - LABEL_OFFSET) / TILE_SIZE;
+    int row = (pixel.y - LABEL_OFFSET) / TILE_SIZE;
+    if (flipped) {
+        col = BOARD_SIZE - 1 - col;
+        row = BOARD_SIZE - 1 - row;
+    }
+    return { col, row };
 }
 
-void Board::setSelectedSquare(sf::Vector2i pos) {
-    selectedSquare = pos;
-}
+void Board::setSelectedSquare(sf::Vector2i pos) { selectedSquare = pos; }
+void Board::setHighlightedSquares(const std::vector<sf::Vector2i>& squares) { highlightedSquares = squares; }
+void Board::clearHighlights() { selectedSquare = { -1, -1 }; highlightedSquares.clear(); }
 
-void Board::setHighlightedSquares(const std::vector<sf::Vector2i>& squares) {
-    highlightedSquares = squares;
-}
-
-void Board::clearHighlights() {
-    selectedSquare = { -1, -1 };
-    highlightedSquares.clear();
-}
-
-const std::vector<std::unique_ptr<Piece>>& Board::getPieces() const {
-    return pieces;
-}
-
-const std::vector<std::string>& Board::getMoveHistory() const {
-    return moveHistory;
-}
-
-void Board::addMoveToHistory(const std::string& move) {
-    moveHistory.push_back(move);
-}
+const std::vector<std::unique_ptr<Piece>>& Board::getPieces() const { return pieces; }
+const std::vector<std::string>& Board::getMoveHistory() const { return moveHistory; }
+void Board::addMoveToHistory(const std::string& move) { moveHistory.push_back(move); }
+void Board::clearMoveHistory() { moveHistory.clear(); }
 
 const std::vector<Piece*>& Board::getCapturedPieces(PieceColor color) const {
     return (color == PieceColor::White) ? capturedByWhite : capturedByBlack;

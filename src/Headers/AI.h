@@ -1,9 +1,6 @@
 ﻿#pragma once
 
 #include <SFML/Graphics.hpp>
-#include <thread>
-#include <atomic>
-#include <mutex>
 #include <optional>
 #include "ChessTypes.h"
 
@@ -18,24 +15,17 @@ struct Move {
 class AI {
 public:
     AI(PieceColor color, int depth);
-    ~AI();
 
-    // Called once per frame. Starts search if idle, returns move when done.
+    // Runs the search synchronously and returns the best move.
     std::optional<Move> update(Board& board, const MoveValidator& validator);
 
-    bool isThinking() const { return thinking.load(); }
+    bool isThinking() const { return false; }  // kept for API compatibility
 
 private:
-    PieceColor        color;
-    int               depth; 
+    PieceColor color;
+    int        depth;
 
-    std::thread       searchThread;
-    std::atomic<bool> thinking{ false };
-
-    std::mutex        resultMutex;
-    std::optional<Move> result;
-
-    void runSearch(Board* boardCopy, const MoveValidator& validator);
+    std::optional<Move> runSearch(Board& board, const MoveValidator& validator);
 
     int minimax(Board& board, int depth, int alpha, int beta,
         bool isMaximizing, const MoveValidator& validator) const;

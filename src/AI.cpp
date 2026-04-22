@@ -9,84 +9,53 @@ AI::AI(PieceColor color, int depth)
     : color(color), depth(depth) {
 }
 
-AI::~AI() {
-    if (searchThread.joinable())
-        searchThread.join();
-}
-
 // -------------------------------------------------------
-// update � called every frame from Game::update()
+// update — runs the search synchronously on the real board.
+// Returns the best move found, or nullopt if no moves exist.
 // -------------------------------------------------------
 std::optional<Move> AI::update(Board& board, const MoveValidator& validator) {
-    if (!thinking.load()) {
-        // Check if there's a result ready
-        std::lock_guard<std::mutex> lock(resultMutex);
-        if (result.has_value()) {
-            Move best = *result;
-            result = std::nullopt;
-            return best;
-        }
-
-        // Start a new search on a COPY of the board
-        // The copy is made here on the main thread (board is safe to read right now)
-        // and ownership is transferred to the search thread.
-        if (searchThread.joinable())
-            searchThread.join();
-
-        thinking.store(true);
-
-        // Clone the board � the thread owns this copy and never touches the real board
-        Board* boardCopy = new Board(board);
-        searchThread = std::thread(&AI::runSearch, this, boardCopy, std::ref(validator));
-    }
-    return std::nullopt;
+    return runSearch(board, validator);
 }
 
 // -------------------------------------------------------
-// runSearch � runs on the background thread
-//
-// Works entirely on boardCopy � the real board is never touched.
-// Once done, writes the best move to result and signals thinking=false.
+// runSearch — collects all legal AI moves, evaluates each
+// with minimax, and returns the best one.
 // -------------------------------------------------------
-void AI::runSearch(Board* boardCopy, const MoveValidator& validator) {
+std::optional<Move> AI::runSearch(Board& board, const MoveValidator& validator) {
     Move bestMove;
     int  bestScore = std::numeric_limits<int>::min();
     bool foundAny = false;
 
-    // Collect all legal moves for AI pieces on the copy
     struct PieceMove { sf::Vector2i from, to; };
     std::vector<PieceMove> allMoves;
 
-    for (auto& p : boardCopy->getPieces()) {
+    for (auto& p : board.getPieces()) {
         if (p->getColor() != color) continue;
 
-        auto candidates = p->getLegalMoves(*boardCopy);
+        auto candidates = p->getLegalMoves(board);
         if (p->getType() == PieceType::King) {
-            auto castling = validator.getCastlingMoves(*boardCopy, p.get());
+            auto castling = validator.getCastlingMoves(board, p.get());
             candidates.insert(candidates.end(), castling.begin(), castling.end());
         }
 
-        // Snapshot the position BEFORE filterSafeMoves, because it calls
-        // makeSimMove/undoSimMove internally and can transiently alter the
-        // piece's position field even after the undo restores it.
+        // Snapshot the position before filterSafeMoves, which uses
+        // makeSimMove/undoSimMove internally.
         sf::Vector2i from = p->getPosition();
 
-        // Filter safe moves once here, not inside minimax
-        auto safe = validator.filterSafeMoves(*boardCopy, p.get(), candidates);
+        auto safe = validator.filterSafeMoves(board, p.get(), candidates);
         for (auto& to : safe)
             allMoves.push_back({ from, to });
     }
 
     for (auto& pm : allMoves) {
-        // Apply move on the copy
-        auto undo = boardCopy->makeSimMove(pm.from, pm.to);
+        auto undo = board.makeSimMove(pm.from, pm.to);
 
-        int score = minimax(*boardCopy, depth - 1,
+        int score = minimax(board, depth - 1,
             std::numeric_limits<int>::min(),
             std::numeric_limits<int>::max(),
             false, validator);
 
-        boardCopy->undoSimMove(undo);
+        board.undoSimMove(undo);
 
         if (!foundAny || score > bestScore) {
             bestScore = score;
@@ -95,21 +64,16 @@ void AI::runSearch(Board* boardCopy, const MoveValidator& validator) {
         }
     }
 
-    delete boardCopy;
-
-    {
-        std::lock_guard<std::mutex> lock(resultMutex);
-        if (foundAny) result = bestMove;
-    }
-    thinking.store(false);
+    if (!foundAny) return std::nullopt;
+    return bestMove;
 }
 
 // -------------------------------------------------------
-// minimax � operates entirely on the copied board
-//
-// Key improvement: moves are collected and filtered ONCE
-// per node. filterSafeMoves uses make-unmake internally
-// but only on the copy, never the real board.
+// minimax — alpha-beta pruning search on the board.
+// Uses raw (unfiltered) moves inside the tree to avoid
+// nested makeSimMove/undoSimMove conflicts with filterSafeMoves.
+// Illegal moves get a natural penalty: the opponent can
+// capture the king next ply, yielding a very bad score.
 // -------------------------------------------------------
 int AI::minimax(Board& board, int depth, int alpha, int beta,
     bool isMaximizing, const MoveValidator& validator) const
@@ -119,11 +83,6 @@ int AI::minimax(Board& board, int depth, int alpha, int beta,
     PieceColor sideToMove = isMaximizing ? color
         : (color == PieceColor::White ? PieceColor::Black : PieceColor::White);
 
-    // Use RAW moves inside minimax � no filterSafeMoves.
-    // filterSafeMoves calls makeSimMove internally which corrupts the
-    // board state when nested inside our own makeSimMove calls.
-    // Instead, illegal moves (leaving king in check) get a huge penalty
-    // score naturally because the opponent can capture the king next move.
     std::vector<std::pair<sf::Vector2i, sf::Vector2i>> moves;
     for (auto& p : board.getPieces()) {
         if (p->getColor() != sideToMove) continue;
@@ -133,7 +92,7 @@ int AI::minimax(Board& board, int depth, int alpha, int beta,
     }
 
     if (moves.empty())
-        return isMaximizing ? -50000 : 50000;  // no moves � bad position
+        return isMaximizing ? -50000 : 50000;
 
     if (isMaximizing) {
         int best = std::numeric_limits<int>::min();

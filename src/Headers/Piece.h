@@ -14,12 +14,14 @@ public:
     virtual ~Piece() = default;
 
     virtual std::vector<sf::Vector2i> getLegalMoves(const Board& board) const = 0;
-
-    // Clone is needed by Board's copy constructor for AI simulation
     virtual std::unique_ptr<Piece> clone() const = 0;
 
     void draw(sf::RenderWindow& window, int tileSize) const;
     void drawWithOffset(sf::RenderWindow& window, int tileSize, int offset) const;
+
+    // Draw at an explicit screen column/row (used for board-flip support)
+    void drawAtScreen(sf::RenderWindow& window, int tileSize, int offset,
+        sf::Vector2i screenPos) const;
 
     PieceType    getType()     const;
     PieceColor   getColor()    const;

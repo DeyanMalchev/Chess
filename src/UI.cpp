@@ -5,15 +5,14 @@
 #include <iomanip>
 #include <sstream>
 
-// The board takes up 30 (label offset) + 8*80 (tiles) + 30 (padding) = 700px wide
-// Sidebar starts at x = 700
 static const float SIDEBAR_X = 700.f;
 static const float WINDOW_H = 700.f;
 
 UI::UI(sf::RenderWindow& window) : window(window) {
-    // SFML 3: FloatRect takes two Vector2f arguments — position and size
     pvpButtonRect = sf::FloatRect({ 300.f, 260.f }, { 200.f, 55.f });
     pvaiButtonRect = sf::FloatRect({ 300.f, 340.f }, { 200.f, 55.f });
+    whiteButtonRect = sf::FloatRect({ 230.f, 310.f }, { 140.f, 55.f });
+    blackButtonRect = sf::FloatRect({ 430.f, 310.f }, { 140.f, 55.f });
 }
 
 bool UI::loadFont(const std::string& fontPath) {
@@ -29,7 +28,6 @@ bool UI::loadFont(const std::string& fontPath) {
 // -------------------------------------------------------
 
 void UI::drawMenu() const {
-    // Title
     sf::Text title(font, "Chess", 64);
     title.setFillColor(sf::Color::White);
     title.setPosition({ 330.f, 140.f });
@@ -41,11 +39,31 @@ void UI::drawMenu() const {
 
 GameState UI::handleMenuClick(sf::Vector2i mousePos) const {
     sf::Vector2f pos(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-
     if (pvpButtonRect.contains(pos))  return GameState::PlayingPvP;
-    if (pvaiButtonRect.contains(pos)) return GameState::PlayingPvAI;
+    if (pvaiButtonRect.contains(pos)) return GameState::ChoosingSide;
+    return GameState::Menu;
+}
 
-    return GameState::Menu;  // nothing was clicked
+// -------------------------------------------------------
+// Side selection
+// -------------------------------------------------------
+
+void UI::drawSideSelection() const {
+    sf::Text title(font, "Choose Your Side", 48);
+    title.setFillColor(sf::Color::White);
+    auto bounds = title.getLocalBounds();
+    title.setPosition({ (800.f - bounds.size.x) / 2.f, 180.f });
+    window.draw(title);
+
+    drawButton("White", whiteButtonRect, sf::Color(220, 200, 160));
+    drawButton("Black", blackButtonRect, sf::Color(60, 60, 60));
+}
+
+std::optional<PieceColor> UI::handleSideSelectionClick(sf::Vector2i mousePos) const {
+    sf::Vector2f pos(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
+    if (whiteButtonRect.contains(pos)) return PieceColor::White;
+    if (blackButtonRect.contains(pos)) return PieceColor::Black;
+    return std::nullopt;
 }
 
 // -------------------------------------------------------
@@ -57,7 +75,6 @@ void UI::drawSidebar(const Board& board,
     float blackTimeSeconds,
     PieceColor currentTurn) const
 {
-    // Background panel
     sf::RectangleShape panel({ 400.f, WINDOW_H });
     panel.setPosition({ SIDEBAR_X, 0.f });
     panel.setFillColor(sf::Color(45, 45, 45));
@@ -85,7 +102,6 @@ void UI::drawSidebar(const Board& board,
     histLabel.setFillColor(sf::Color(180, 180, 180));
     histLabel.setPosition({ SIDEBAR_X + 20.f, 210.f });
     window.draw(histLabel);
-
     drawMoveHistory(board.getMoveHistory(), { SIDEBAR_X + 20.f, 234.f });
 }
 
@@ -94,29 +110,20 @@ void UI::drawSidebar(const Board& board,
 // -------------------------------------------------------
 
 void UI::drawGameOver(const std::string& resultMessage) const {
-    // Semi-transparent overlay over the board
     sf::RectangleShape overlay({ 700.f, 700.f });
     overlay.setFillColor(sf::Color(0, 0, 0, 170));
     window.draw(overlay);
 
-    // Result message — centered
     sf::Text msg(font, resultMessage, 36);
     msg.setFillColor(sf::Color::White);
     auto bounds = msg.getLocalBounds();
-    msg.setPosition({
-        (700.f - bounds.size.x) / 2.f,
-        280.f
-        });
+    msg.setPosition({ (700.f - bounds.size.x) / 2.f, 280.f });
     window.draw(msg);
 
-    // Subtitle
     sf::Text sub(font, "Click anywhere to return to menu", 18);
     sub.setFillColor(sf::Color(180, 180, 180));
     auto subBounds = sub.getLocalBounds();
-    sub.setPosition({
-        (700.f - subBounds.size.x) / 2.f,
-        340.f
-        });
+    sub.setPosition({ (700.f - subBounds.size.x) / 2.f, 340.f });
     window.draw(sub);
 }
 
@@ -134,7 +141,6 @@ void UI::drawButton(const std::string& label, sf::FloatRect rect, sf::Color colo
 
     sf::Text text(font, label, 20);
     text.setFillColor(sf::Color::White);
-    // Center text in button
     auto bounds = text.getLocalBounds();
     text.setPosition({
         rect.position.x + (rect.size.x - bounds.size.x) / 2.f,
@@ -144,15 +150,12 @@ void UI::drawButton(const std::string& label, sf::FloatRect rect, sf::Color colo
 }
 
 void UI::drawMoveHistory(const std::vector<std::string>& history, sf::Vector2f origin) const {
-    // Show the last 16 moves (8 pairs), two columns: white move | black move
     int startIdx = std::max(0, (int)history.size() - 16);
-
     for (int i = startIdx; i < (int)history.size(); i++) {
         int displayIdx = i - startIdx;
         float x = origin.x + (displayIdx % 2 == 0 ? 0.f : 160.f);
         float y = origin.y + (displayIdx / 2) * 22.f;
 
-        // Move number on the left of white's move
         std::string text = history[i];
         if (i % 2 == 0)
             text = std::to_string(i / 2 + 1) + ". " + text;
@@ -164,11 +167,11 @@ void UI::drawMoveHistory(const std::vector<std::string>& history, sf::Vector2f o
     }
 }
 
-void UI::drawCapturedPieces(const std::vector<Piece*>& pieces, PieceColor side, sf::Vector2f origin) const {
-    // For now just show a count — sprites can be added later
+void UI::drawCapturedPieces(const std::vector<Piece*>& pieces, PieceColor side,
+    sf::Vector2f origin) const {
     sf::Text label(font,
-        (side == PieceColor::White ? "White captured: " : "Black captured: ") + std::to_string(pieces.size()),
-        14);
+        (side == PieceColor::White ? "White captured: " : "Black captured: ")
+        + std::to_string(pieces.size()), 14);
     label.setFillColor(sf::Color(180, 180, 180));
     label.setPosition(origin);
     window.draw(label);
@@ -177,7 +180,6 @@ void UI::drawCapturedPieces(const std::vector<Piece*>& pieces, PieceColor side, 
 void UI::drawTimer(float seconds, bool isActive, sf::Vector2f origin) const {
     int mins = static_cast<int>(seconds) / 60;
     int secs = static_cast<int>(seconds) % 60;
-
     std::ostringstream ss;
     ss << std::setw(2) << std::setfill('0') << mins << ":"
         << std::setw(2) << std::setfill('0') << secs;
@@ -189,24 +191,19 @@ void UI::drawTimer(float seconds, bool isActive, sf::Vector2f origin) const {
 }
 
 // -------------------------------------------------------
-// Pawn Promotion Dialog
-// Shows 4 buttons in the center: Queen, Rook, Bishop, Knight
+// Pawn promotion dialog
 // -------------------------------------------------------
 
-// Layout: 4 boxes of 80x80 centered on the board (board = 700px wide)
 static sf::FloatRect promotionRect(int index) {
     float totalW = 4 * 90.f;
     float startX = (700.f - totalW) / 2.f;
     return sf::FloatRect({ startX + index * 90.f, 290.f }, { 80.f, 80.f });
 }
 
-static const PieceType PROMO_TYPES[4] = {
-    PieceType::Queen, PieceType::Rook, PieceType::Bishop, PieceType::Knight
-};
+static const PieceType PROMO_TYPES[4] = { PieceType::Queen, PieceType::Rook, PieceType::Bishop, PieceType::Knight };
 static const char* PROMO_LABELS[4] = { "Q", "R", "B", "N" };
 
 void UI::drawPromotionDialog(PieceColor color) const {
-    // Dim background
     sf::RectangleShape overlay({ 700.f, 700.f });
     overlay.setFillColor(sf::Color(0, 0, 0, 160));
     window.draw(overlay);
@@ -238,9 +235,7 @@ void UI::drawPromotionDialog(PieceColor color) const {
 
 std::optional<PieceType> UI::handlePromotionClick(sf::Vector2i mousePos, PieceColor color) const {
     sf::Vector2f pos(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-    for (int i = 0; i < 4; i++) {
-        if (promotionRect(i).contains(pos))
-            return PROMO_TYPES[i];
-    }
+    for (int i = 0; i < 4; i++)
+        if (promotionRect(i).contains(pos)) return PROMO_TYPES[i];
     return std::nullopt;
 }

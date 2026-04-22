@@ -22,8 +22,8 @@ struct UndoInfo {
     sf::Vector2i rookTo;
     bool         rookHadMoved = false;
 
-    bool         wasPromotion = false;     // pawn reached back rank in simulation
-    PieceColor   promotionColor = PieceColor::White;  // color of the promoted pawn
+    bool         wasPromotion = false;
+    PieceColor   promotionColor = PieceColor::White;
 };
 
 class Board {
@@ -39,7 +39,8 @@ public:
     void init(class TextureManager& textures);
     void promotePawn(sf::Vector2i pos, PieceType newType, sf::Texture* texture);
 
-    void draw(sf::RenderWindow& window) const;
+    // flipped=true draws board from Black's perspective
+    void draw(sf::RenderWindow& window, bool flipped = false) const;
 
     Piece* getPieceAt(sf::Vector2i pos) const;
 
@@ -47,11 +48,12 @@ public:
     void movePiece(sf::Vector2i from, sf::Vector2i to);
     void removePiece(sf::Vector2i pos);
 
-    // AI simulation: apply and undo moves on the same board — no copying
+    // AI simulation: apply and undo moves on the same board
     UndoInfo makeSimMove(sf::Vector2i from, sf::Vector2i to);
     void     undoSimMove(UndoInfo& undo);
 
-    sf::Vector2i pixelToBoard(sf::Vector2i pixel) const;
+    // pixel → board coord, respecting flip
+    sf::Vector2i pixelToBoard(sf::Vector2i pixel, bool flipped = false) const;
 
     void setSelectedSquare(sf::Vector2i pos);
     void setHighlightedSquares(const std::vector<sf::Vector2i>& squares);
@@ -61,6 +63,7 @@ public:
 
     const std::vector<std::string>& getMoveHistory() const;
     void addMoveToHistory(const std::string& move);
+    void clearMoveHistory();
 
     const std::vector<Piece*>& getCapturedPieces(PieceColor color) const;
 
@@ -74,8 +77,11 @@ private:
     std::vector<sf::Vector2i> highlightedSquares;
     sf::Font font;
 
-    void drawSquares(sf::RenderWindow& window) const;
-    void drawLabels(sf::RenderWindow& window) const;
-    void drawHighlights(sf::RenderWindow& window) const;
-    void drawPieces(sf::RenderWindow& window) const;
+    void drawSquares(sf::RenderWindow& window, bool flipped) const;
+    void drawLabels(sf::RenderWindow& window, bool flipped) const;
+    void drawHighlights(sf::RenderWindow& window, bool flipped) const;
+    void drawPieces(sf::RenderWindow& window, bool flipped) const;
+
+    // Convert logical board coord to screen coord given flip setting
+    sf::Vector2i toScreen(sf::Vector2i boardPos, bool flipped) const;
 };

@@ -23,17 +23,24 @@ private:
     UI             ui;
     TextureManager textures;
 
-    // AI — nullptr in PvP mode, created on startGame for PvAI
     AI* ai = nullptr;
 
     GameState    gameState = GameState::Menu;
     PieceColor   currentTurn = PieceColor::White;
-    PieceColor   aiColor = PieceColor::Black;  // AI always plays black by default
+
+    // In PvAI: the color the human chose; AI takes the opposite.
+    PieceColor   playerColor = PieceColor::White;
+    PieceColor   aiColor = PieceColor::Black;
+
+    // true when the board should be drawn from Black's perspective
+    bool boardFlipped = false;
+
+    // Pending PvAI mode — stored between Menu and ChoosingSide
+    GameState pendingMode = GameState::PlayingPvAI;
 
     class Piece* selectedPiece = nullptr;
     std::vector<sf::Vector2i> legalMovesCache;
 
-    // Pawn promotion — stores the square of the pawn waiting for promotion
     std::optional<sf::Vector2i> pendingPromotionSquare;
     GameState stateBeforePromotion = GameState::PlayingPvP;
 
@@ -43,22 +50,20 @@ private:
 
     std::string gameOverMessage;
 
-    // Main loop
     void processEvents();
     void update(float deltaTime);
     void render();
 
-    // Input
     void handleMenuClick(sf::Vector2i& mousePos);
+    void handleSideSelectionClick(sf::Vector2i& mousePos);
     void handleBoardClick(sf::Vector2i& mousePos);
     void handlePromotionClick(sf::Vector2i& mousePos);
 
-    // Game logic
     void selectPiece(class Piece* piece);
     void makeMove(sf::Vector2i from, sf::Vector2i to);
     void switchTurn();
     void checkGameOver();
     void triggerAIMove();
 
-    void startGame(GameState mode);
+    void startGame(GameState mode, PieceColor humanColor = PieceColor::White);
 };
