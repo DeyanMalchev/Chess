@@ -10,8 +10,7 @@ bool MoveValidator::isInCheck(const Board& board, PieceColor color) const {
     return isSquareAttackedBy(board, king->getPosition(), enemy);
 }
 
-bool MoveValidator::isSquareAttackedBy(const Board& board, sf::Vector2i square,
-    PieceColor attackerColor) const {
+bool MoveValidator::isSquareAttackedBy(const Board& board, sf::Vector2i square, PieceColor attackerColor) const {
     for (auto& p : board.getPieces()) {
         if (p->getColor() != attackerColor) continue;
         for (auto& move : p->getLegalMoves(board))
@@ -21,8 +20,7 @@ bool MoveValidator::isSquareAttackedBy(const Board& board, sf::Vector2i square,
 }
 
 // Use make-unmake instead of const_cast simulation
-bool MoveValidator::wouldBeInCheckAfterMove(Board& board, Piece* piece,
-    sf::Vector2i target, PieceColor color) const {
+bool MoveValidator::wouldBeInCheckAfterMove(Board& board, Piece* piece, sf::Vector2i target, PieceColor color) const {
     auto undo = board.makeSimMove(piece->getPosition(), target);
     bool inCheck = isInCheck(board, color);
     board.undoSimMove(undo);

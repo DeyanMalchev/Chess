@@ -131,7 +131,7 @@ int AI::getPieceValue(PieceType type) const {
     case PieceType::Knight: return 320;
     case PieceType::Bishop: return 330;
     case PieceType::Rook:   return 500;
-    case PieceType::Queen:  return 900;
+    case PieceType::Queen:  return 1000;
     case PieceType::King:   return 20000;
     }
     return 0;

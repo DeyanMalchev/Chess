@@ -9,10 +9,10 @@ static const float SIDEBAR_X = 700.f;
 static const float WINDOW_H = 700.f;
 
 UI::UI(sf::RenderWindow& window) : window(window) {
-    pvpButtonRect = sf::FloatRect({ 300.f, 260.f }, { 200.f, 55.f });
-    pvaiButtonRect = sf::FloatRect({ 300.f, 340.f }, { 200.f, 55.f });
-    whiteButtonRect = sf::FloatRect({ 230.f, 310.f }, { 140.f, 55.f });
-    blackButtonRect = sf::FloatRect({ 430.f, 310.f }, { 140.f, 55.f });
+    pvpButtonRect = sf::FloatRect({ 450.f, 260.f }, { 200.f, 55.f });
+    pvaiButtonRect = sf::FloatRect({ 450.f, 340.f }, { 200.f, 55.f });
+    whiteButtonRect = sf::FloatRect({ 400.f, 310.f }, { 140.f, 55.f });
+    blackButtonRect = sf::FloatRect({ 580.f, 310.f }, { 140.f, 55.f });
 }
 
 bool UI::loadFont(const std::string& fontPath) {
@@ -30,7 +30,7 @@ bool UI::loadFont(const std::string& fontPath) {
 void UI::drawMenu() const {
     sf::Text title(font, "Chess", 64);
     title.setFillColor(sf::Color::White);
-    title.setPosition({ 330.f, 140.f });
+    title.setPosition({ 450.f, 140.f });
     window.draw(title);
 
     drawButton("Player vs Player", pvpButtonRect, sf::Color(70, 130, 180));
@@ -52,7 +52,7 @@ void UI::drawSideSelection() const {
     sf::Text title(font, "Choose Your Side", 48);
     title.setFillColor(sf::Color::White);
     auto bounds = title.getLocalBounds();
-    title.setPosition({ (800.f - bounds.size.x) / 2.f, 180.f });
+    title.setPosition({ (800.f - bounds.size.x) - 50, 180.f });
     window.draw(title);
 
     drawButton("White", whiteButtonRect, sf::Color(220, 200, 160));
